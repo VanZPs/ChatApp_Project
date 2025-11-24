@@ -1,272 +1,169 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
-  View,
-  Text,
-  TextInput,
-  Button,
-  FlatList,
-  StyleSheet,
-  Image,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert
+  View, Text, TextInput, FlatList, StyleSheet, Image, 
+  TouchableOpacity, ActivityIndicator, Alert, KeyboardAvoidingView, Platform
 } from "react-native";
-
-// Import Firebase
-import {
-  addDoc,
-  serverTimestamp,
-  query,
-  orderBy,
-  onSnapshot
-} from "firebase/firestore";
-import { messagesCollection, auth } from "../firebase"; // Pastikan path ini benar
-
-// Import Library Tambahan
+import LinearGradient from "react-native-linear-gradient";
+import { addDoc, serverTimestamp, query, orderBy, onSnapshot } from "firebase/firestore";
+import { messagesCollection, auth } from "../firebase";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { launchImageLibrary } from 'react-native-image-picker';
 
-// Tipe data pesan
 type MessageType = {
   id: string;
   text: string;
   user: string;
-  imageUrl?: string; // Menyimpan string Base64 gambar
+  senderName?: string; // Tambahan field Nama
+  imageUrl?: string;
   createdAt: any;
 };
 
 export default function ChatScreen() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<MessageType[]>([]);
-  const [uploading, setUploading] = useState(false);
+  const flatListRef = useRef<FlatList>(null);
   
-  // Ambil email user yang sedang login
   const userEmail = auth.currentUser?.email;
+  // Ambil nama user yang sedang login (dari Auth)
+  const currentUserName = auth.currentUser?.displayName || userEmail?.split('@')[0];
 
   useEffect(() => {
-    // 1. Load History dari Local Storage (Agar muncul saat Offline)
-    const loadLocalMessages = async () => {
-      try {
-        const saved = await AsyncStorage.getItem('chat_history');
-        if (saved) {
-          setMessages(JSON.parse(saved));
-        }
-      } catch (error) {
-        console.log("Gagal memuat local storage:", error);
-      }
+    const loadCache = async () => {
+      const saved = await AsyncStorage.getItem('chat_history');
+      if (saved) setMessages(JSON.parse(saved));
     };
-    loadLocalMessages();
+    loadCache();
 
-    // 2. Setup Listener Real-time ke Firebase Firestore
     const q = query(messagesCollection, orderBy("createdAt", "asc"));
-    
     const unsub = onSnapshot(q, (snapshot) => {
       const list: MessageType[] = [];
       snapshot.forEach((doc) => {
-        // Gabungkan ID dokumen dengan data isinya
-        list.push({
-          id: doc.id,
-          ...doc.data()
-        } as MessageType);
+        list.push({ id: doc.id, ...doc.data() } as MessageType);
       });
-      
-      // Update state aplikasi
       setMessages(list);
-      
-      // Simpan data terbaru ke Local Storage (Untuk penggunaan offline berikutnya)
       AsyncStorage.setItem('chat_history', JSON.stringify(list));
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 500);
     });
-
-    // Cleanup listener saat keluar layar
     return () => unsub();
   }, []);
 
-  // Fungsi Kirim Pesan (Text atau Gambar)
-  const sendMessage = async (imageBase64: string | null = null) => {
-    // Validasi: Jangan kirim jika text kosong DAN gambar kosong
-    if (!message.trim() && !imageBase64) return;
-    
+  const sendMessage = async (imgBase64: string | null = null) => {
+    if (!message.trim() && !imgBase64) return;
     try {
       await addDoc(messagesCollection, {
-        text: message,       // Isi pesan teks
-        user: userEmail,     // Pengirim
-        imageUrl: imageBase64, // String Base64 gambar (jika ada)
+        text: message,
+        user: userEmail,
+        senderName: currentUserName, // Kirim Nama User
+        imageUrl: imgBase64,
         createdAt: serverTimestamp(),
       });
-      
-      setMessage(""); // Kosongkan input text setelah kirim
+      setMessage("");
     } catch (error) {
-      Alert.alert("Gagal Kirim", "Terjadi kesalahan saat mengirim pesan.");
-      console.error(error);
+      Alert.alert("Gagal", "Pesan tidak terkirim.");
     }
   };
 
-  // Fungsi Pilih Gambar & Konversi ke Base64
   const pickImage = async () => {
-    try {
-      const result = await launchImageLibrary({
-        mediaType: 'photo',
-        includeBase64: true, // PENTING: Agar mendapat data teks gambar
-        quality: 0.5,        // Kompresi 50% agar hemat kuota database
-        maxWidth: 500,       // Resize lebar maks 500px
-        maxHeight: 500,      // Resize tinggi maks 500px
-      });
-
-      if (result.didCancel) return;
-
-      if (result.assets && result.assets.length > 0) {
-        setUploading(true);
-        const asset = result.assets[0];
-
-        if (asset.base64) {
-          // Format string Base64 agar bisa dibaca komponen Image
-          const base64String = `data:${asset.type};base64,${asset.base64}`;
-          
-          // Langsung kirim sebagai pesan
-          await sendMessage(base64String);
-        } else {
-          Alert.alert("Error", "Gagal memproses gambar (Base64 not found).");
-        }
-        setUploading(false);
-      }
-    } catch (error) {
-      setUploading(false);
-      Alert.alert("Error", "Gagal membuka galeri.");
+    const result = await launchImageLibrary({
+      mediaType: 'photo', includeBase64: true, quality: 0.5, maxWidth: 500, maxHeight: 500 
+    });
+    if (result.assets && result.assets[0].base64) {
+      sendMessage(`data:${result.assets[0].type};base64,${result.assets[0].base64}`);
     }
   };
 
-  // Komponen untuk merender setiap item chat
+  const formatTime = (timestamp: any) => {
+    if (!timestamp) return "..";
+    return new Date(timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
   const renderItem = ({ item }: { item: MessageType }) => {
-    const isMyMessage = item.user === userEmail;
+    const isMe = item.user === userEmail;
+    // Gunakan senderName jika ada, kalau tidak pakai email
+    const displayName = item.senderName || item.user.split('@')[0];
 
     return (
-      <View style={[
-        styles.msgBox, 
-        isMyMessage ? styles.myMsg : styles.otherMsg
-      ]}>
-        <Text style={styles.sender}>{item.user}</Text>
-        
-        {/* Jika ada gambar, tampilkan */}
-        {item.imageUrl ? (
-          <Image 
-            source={{ uri: item.imageUrl }} 
-            style={styles.chatImage}
-            resizeMode="cover"
-          />
-        ) : null}
-
-        {/* Jika ada text, tampilkan */}
-        {item.text ? <Text style={styles.msgText}>{item.text}</Text> : null}
+      <View style={[styles.msgRow, isMe ? styles.msgRowRight : styles.msgRowLeft]}>
+        {!isMe && (
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{displayName.charAt(0).toUpperCase()}</Text>
+          </View>
+        )}
+        <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>
+          {/* Tampilkan Nama Pengirim */}
+          {!isMe && <Text style={styles.senderName}>{displayName}</Text>}
+          
+          {item.imageUrl && <Image source={{ uri: item.imageUrl }} style={styles.chatImage} resizeMode="cover" />}
+          {item.text ? <Text style={[styles.msgText, isMe ? styles.textWhite : styles.textDark]}>{item.text}</Text> : null}
+          <Text style={[styles.timeText, isMe ? styles.timeWhite : styles.timeDark]}>{formatTime(item.createdAt)}</Text>
+        </View>
       </View>
     );
   };
 
   return (
     <View style={styles.container}>
-      {/* List Pesan */}
+      <LinearGradient colors={["#8A2BE2", "#9370DB"]} style={styles.header}>
+        <Text style={styles.headerTitle}>Group Chat 💬</Text>
+        <TouchableOpacity onPress={() => auth.signOut()} style={styles.logoutBtn}>
+          <Text style={styles.logoutText}>Exit</Text>
+        </TouchableOpacity>
+      </LinearGradient>
+
       <FlatList 
-        data={messages} 
-        renderItem={renderItem} 
-        keyExtractor={(item) => item.id} 
-        contentContainerStyle={{ paddingBottom: 20 }}
+        ref={flatListRef} data={messages} renderItem={renderItem} keyExtractor={(i) => i.id} 
+        contentContainerStyle={styles.listContent} 
       />
       
-      {/* Input Area */}
-      <View style={styles.inputRow}>
-        {/* Tombol Kamera/Gambar */}
-        <TouchableOpacity onPress={pickImage} style={styles.imgBtn} disabled={uploading}>
-             <Text style={styles.imgBtnText}>📷</Text>
-        </TouchableOpacity>
-
-        {/* Kolom Ketik */}
-        <TextInput 
-          style={styles.input} 
-          placeholder="Ketik pesan..." 
-          value={message} 
-          onChangeText={setMessage} 
-          multiline
-        />
-
-        {/* Tombol Kirim */}
-        {uploading ? (
-          <ActivityIndicator size="small" color="#0000ff" />
-        ) : (
-          <Button title="Kirim" onPress={() => sendMessage()} />
-        )}
-      </View>
-      
-      {/* Tombol Logout (Opsional, untuk testing) */}
-      <View style={styles.logoutContainer}>
-        <Button title="Logout" color="red" onPress={() => auth.signOut()} />
-      </View>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <View style={styles.inputContainer}>
+          <TouchableOpacity onPress={pickImage} style={styles.attachBtn}>
+            <Text style={styles.icon}>📷</Text>
+          </TouchableOpacity>
+          <TextInput 
+            style={styles.input} placeholder="Tulis pesan..." placeholderTextColor="#999"
+            value={message} onChangeText={setMessage} multiline 
+          />
+          <TouchableOpacity onPress={() => sendMessage()} style={styles.sendBtn}>
+            <Text style={styles.sendIcon}>➤</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 
+// Style sama persis dengan sebelumnya
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#fff' 
+  container: { flex: 1, backgroundColor: '#F8F8FF' },
+  header: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: 15, paddingTop: 20, elevation: 5,
   },
-  msgBox: { 
-    padding: 10, 
-    marginVertical: 5, 
-    marginHorizontal: 10,
-    borderRadius: 10, 
-    maxWidth: "80%" 
-  },
-  myMsg: { 
-    backgroundColor: "#d1f0ff", 
-    alignSelf: "flex-end" 
-  },
-  otherMsg: { 
-    backgroundColor: "#f0f0f0", 
-    alignSelf: "flex-start" 
-  },
-  sender: { 
-    fontSize: 10, 
-    fontWeight: "bold", 
-    marginBottom: 4, 
-    color: '#555' 
-  },
-  msgText: {
-    fontSize: 16,
-    color: '#000'
-  },
-  chatImage: { 
-    width: 200, 
-    height: 200, 
-    borderRadius: 10, 
-    marginBottom: 5 
-  },
-  inputRow: { 
-    flexDirection: "row", 
-    padding: 10, 
-    borderTopWidth: 1, 
-    borderColor: "#ccc", 
-    alignItems: 'center',
-    backgroundColor: '#fff'
-  },
-  input: { 
-    flex: 1, 
-    borderWidth: 1, 
-    borderColor: '#ddd',
-    borderRadius: 20, 
-    paddingHorizontal: 15, 
-    paddingVertical: 8,
-    marginHorizontal: 10,
-    maxHeight: 100
-  },
-  imgBtn: { 
-    padding: 10, 
-    backgroundColor: '#eee', 
-    borderRadius: 25 
-  },
-  imgBtnText: {
-    fontSize: 20
-  },
-  logoutContainer: {
-    marginBottom: 20,
-    marginHorizontal: 20
-  }
+  headerTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+  logoutBtn: { backgroundColor: 'rgba(255,255,255,0.2)', padding: 8, borderRadius: 10 },
+  logoutText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
+  listContent: { padding: 15, paddingBottom: 20 },
+  msgRow: { flexDirection: 'row', marginBottom: 12, alignItems: 'flex-end' },
+  msgRowRight: { justifyContent: 'flex-end' },
+  msgRowLeft: { justifyContent: 'flex-start' },
+  avatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#E6E6FA', justifyContent: 'center', alignItems: 'center', marginRight: 8 },
+  avatarText: { fontSize: 14, fontWeight: 'bold', color: '#8A2BE2' },
+  bubble: { maxWidth: '75%', padding: 12, borderRadius: 18, elevation: 2 },
+  bubbleMe: { backgroundColor: '#8A2BE2', borderBottomRightRadius: 2 },
+  bubbleOther: { backgroundColor: '#fff', borderBottomLeftRadius: 2 },
+  senderName: { fontSize: 11, color: '#8A2BE2', fontWeight: 'bold', marginBottom: 4 },
+  chatImage: { width: 200, height: 150, borderRadius: 10, marginBottom: 5 },
+  msgText: { fontSize: 16, lineHeight: 22 },
+  textWhite: { color: '#fff' },
+  textDark: { color: '#333' },
+  timeText: { fontSize: 10, alignSelf: 'flex-end', marginTop: 4 },
+  timeWhite: { color: 'rgba(255,255,255,0.7)' },
+  timeDark: { color: '#aaa' },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', padding: 10, backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 10, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 5 },
+  input: { flex: 1, backgroundColor: '#F3E5F5', borderRadius: 25, paddingHorizontal: 20, paddingVertical: 10, marginHorizontal: 10, maxHeight: 100, fontSize: 16, color: '#333' },
+  attachBtn: { padding: 10 },
+  icon: { fontSize: 24 },
+  sendBtn: { backgroundColor: '#8A2BE2', width: 45, height: 45, borderRadius: 25, justifyContent: 'center', alignItems: 'center', elevation: 2 },
+  sendIcon: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginLeft: 3 }
 });

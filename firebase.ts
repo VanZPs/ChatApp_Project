@@ -5,7 +5,7 @@ import { initializeAuth, getReactNativePersistence, getAuth } from "firebase/aut
 import { getFirestore, collection } from "firebase/firestore";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyDTtdISZ5LXsWAHanXQvG-Rc6c41G3M_TM",
   authDomain: "chatapp-e96e4.firebaseapp.com",
   projectId: "chatapp-e96e4",
@@ -15,19 +15,24 @@ const firebaseConfig = {
   measurementId: "G-961QE4BWWV"
 };
 
-const app = initializeApp(firebaseConfig);
+// 1. Inisialisasi App 
+export const app = initializeApp(firebaseConfig);
 
-let authInstance;
+// 2. Inisialisasi Auth
+let auth: any;
+
 try {
-  authInstance = initializeAuth(app, {
+  auth = initializeAuth(app, {
     persistence: getReactNativePersistence(AsyncStorage)
   });
 } catch (error) {
-  authInstance = getAuth(app);
+  auth = getAuth(app);
 }
 
-export const auth = authInstance;
+export { auth };
 
+// 3. Inisialisasi Database
 export const db = getFirestore(app);
 
+// 4. Referensi Koleksi
 export const messagesCollection = collection(db, "messages");
