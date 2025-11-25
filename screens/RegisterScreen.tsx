@@ -6,16 +6,16 @@ import {
 import LinearGradient from "react-native-linear-gradient";
 
 // Import module Firebase
-import { initializeApp, deleteApp, getApp, getApps } from "firebase/app"; 
+import { initializeApp, deleteApp } from "firebase/app"; 
 import { 
   getAuth, 
   createUserWithEmailAndPassword, 
   updateProfile, 
   signOut 
 } from "firebase/auth";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore"; 
+import { doc, setDoc, serverTimestamp, getFirestore } from "firebase/firestore"; 
 
-import { db, app as mainApp } from "../firebase"; 
+import { app as mainApp } from "../firebase"; 
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../App";
 
@@ -38,44 +38,32 @@ export default function RegisterScreen({ navigation }: Props) {
     let tempApp; 
     
     try {
-      // 1. Buat Nama Unik (PENTING: Agar tidak bentrok dengan sesi sebelumnya)
       const uniqueName = "RegisterApp-" + new Date().getTime() + Math.random();
-      
-      // 2. Buat App Sementara
       tempApp = initializeApp(mainApp.options, uniqueName);
       
-      // 3. Gunakan getAuth (Bukan initializeAuth, agar aman)
       const tempAuth = getAuth(tempApp);
+      const tempDb = getFirestore(tempApp); 
 
-      // 4. Buat Akun
       const userCredential = await createUserWithEmailAndPassword(tempAuth, email, password);
       const user = userCredential.user;
 
-      // 5. Update Nama
       await updateProfile(user, {
         displayName: name
       });
 
-      // 6. Simpan ke Database
-      await setDoc(doc(db, "users", user.uid), {
+      await setDoc(doc(tempDb, "users", user.uid), {
         uid: user.uid,
         email: user.email,
         displayName: name,
         createdAt: serverTimestamp(),
       });
 
-      // 7. Logout dari app sementara
       await signOut(tempAuth);
 
       Alert.alert(
         "Registrasi Berhasil!", 
-        "Silakan login menggunakan email dan password yang baru saja dibuat.",
-        [
-          { 
-            text: "OK, Siap Login", 
-            onPress: () => navigation.navigate("Login") 
-          }
-        ]
+        "Silakan login menggunakan akun baru Anda.",
+        [{ text: "OK", onPress: () => navigation.navigate("Login") }]
       );
 
     } catch (error: any) {
@@ -85,14 +73,8 @@ export default function RegisterScreen({ navigation }: Props) {
       Alert.alert("Gagal Daftar", errorMessage);
     } finally {
       setLoading(false);
-      
-      // 8. Bersihkan App Sementara (Wajib!)
       if (tempApp) {
-        try {
-          await deleteApp(tempApp);
-        } catch (e) {
-          // Abaikan error saat cleanup
-        }
+        try { await deleteApp(tempApp); } catch (e) {}
       }
     }
   };
@@ -108,22 +90,25 @@ export default function RegisterScreen({ navigation }: Props) {
           <Text style={styles.subtitle}>Gabung komunitas chat kami</Text>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Nama</Text>
+            <Text style={styles.label}>Nama Lengkap (Max 12 Huruf)</Text>
             <TextInput
               style={styles.input}
-              placeholder="Masukkan nama Anda"
+              placeholder="Contoh: Ivan"
               placeholderTextColor="#aaa"
               value={name}
               onChangeText={setName}
               autoCapitalize="words"
+              maxLength={12} // <--- FITUR BATAS 12 KARAKTER
             />
+            {/* Indikator Sisa Karakter (Opsional, biar user tahu) */}
+            <Text style={styles.charCount}>{name.length}/12</Text>
           </View>
 
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Email</Text>
             <TextInput
               style={styles.input}
-              placeholder="Masukkan email Anda"
+              placeholder="nama@email.com"
               placeholderTextColor="#aaa"
               value={email}
               onChangeText={setEmail}
@@ -136,7 +121,7 @@ export default function RegisterScreen({ navigation }: Props) {
             <Text style={styles.label}>Password</Text>
             <TextInput
               style={styles.input}
-              placeholder="buat password (minimal 6 karakter)"
+              placeholder="Minimal 6 karakter"
               placeholderTextColor="#aaa"
               value={password}
               onChangeText={setPassword}
@@ -189,6 +174,14 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     color: "#333",
+  },
+  // Style tambahan untuk indikator angka
+  charCount: {
+    textAlign: 'right',
+    fontSize: 10,
+    color: '#888',
+    marginTop: 2,
+    marginRight: 5
   },
   btnPrimary: {
     backgroundColor: "#9370DB", 
