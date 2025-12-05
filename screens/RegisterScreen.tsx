@@ -5,7 +5,6 @@ import {
 } from "react-native";
 import LinearGradient from "react-native-linear-gradient";
 
-// Import module Firebase
 import { initializeApp, deleteApp } from "firebase/app"; 
 import { 
   getAuth, 
@@ -98,9 +97,8 @@ export default function RegisterScreen({ navigation }: Props) {
               value={name}
               onChangeText={setName}
               autoCapitalize="words"
-              maxLength={12} // <--- FITUR BATAS 12 KARAKTER
+              maxLength={12}
             />
-            {/* Indikator Sisa Karakter (Opsional, biar user tahu) */}
             <Text style={styles.charCount}>{name.length}/12</Text>
           </View>
 
@@ -175,7 +173,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#333",
   },
-  // Style tambahan untuk indikator angka
+  
   charCount: {
     textAlign: 'right',
     fontSize: 10,

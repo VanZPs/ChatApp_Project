@@ -38,19 +38,15 @@ export default function ChatScreen({ navigation }: Props) {
   const userEmail = auth.currentUser?.email;
   const userUid = auth.currentUser?.uid;
 
-  // --- LOGIKA BARU: CEK APAKAH USER BARU? ---
   useEffect(() => {
     const checkFirstTimeUser = async () => {
       if (userUid) {
-        // Cek di database
         const docRef = doc(db, "users", userUid);
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
           const data = docSnap.data();
-          // Jika 'nameColor' belum ada, berarti ini User Baru (karena RegisterScreen tidak set warna)
           if (!data.nameColor) {
-            // Lempar ke halaman Profil dengan Mode Setup
             navigation.navigate("Profile", { isSetup: true });
           }
         }
@@ -58,7 +54,6 @@ export default function ChatScreen({ navigation }: Props) {
     };
     checkFirstTimeUser();
   }, []);
-  // -------------------------------------------
 
   useFocusEffect(
     useCallback(() => {
@@ -187,7 +182,6 @@ export default function ChatScreen({ navigation }: Props) {
           <Text style={styles.headerSub}>Online</Text>
         </View>
         <View style={styles.headerRight}>
-          {/* Pass parameter kosong saat edit manual */}
           <TouchableOpacity onPress={() => navigation.navigate("Profile", { isSetup: false })} style={styles.headerProfileBtn}>
              {userEmail && userProfiles[userEmail]?.photo ? (
                <Image source={{ uri: userProfiles[userEmail].photo }} style={styles.headerAvatar} />
@@ -218,7 +212,6 @@ export default function ChatScreen({ navigation }: Props) {
   );
 }
 
-// Style sama
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F8FF' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, paddingTop: 20, elevation: 5 },

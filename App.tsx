@@ -5,18 +5,15 @@ import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "./firebase";
 import { ActivityIndicator, View, StatusBar } from "react-native";
 
-// Import halaman-halaman yang sudah dibuat
 import LoginScreen from "./screens/LoginScreen";
 import RegisterScreen from "./screens/RegisterScreen";
 import ChatScreen from "./screens/ChatScreen";
 import ProfileScreen from "./screens/ProfileScreen"; 
 
-// Definisi Tipe Navigasi (Penting untuk TypeScript)
 export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
   Chat: undefined;
-  // Parameter isSetup opsional untuk membedakan mode Edit vs Mode Awal
   Profile: { isSetup?: boolean }; 
 };
 
@@ -26,7 +23,6 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Listener untuk memantau status login user (Realtime)
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -35,7 +31,6 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // Tampilan Loading saat mengecek status login
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
@@ -46,16 +41,13 @@ export default function App() {
 
   return (
     <NavigationContainer>
-      {/* Status Bar senada dengan tema ungu */}
       <StatusBar barStyle="light-content" backgroundColor="#8A2BE2" />
       
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
-          // --- AREA SETELAH LOGIN ---
           <Stack.Group>
             <Stack.Screen name="Chat" component={ChatScreen} />
-            
-            {/* Halaman Profil muncul sebagai Modal (Slide dari bawah) */}
+
             <Stack.Screen 
               name="Profile" 
               component={ProfileScreen} 
@@ -66,7 +58,6 @@ export default function App() {
             />
           </Stack.Group>
         ) : (
-          // --- AREA SEBELUM LOGIN ---
           <Stack.Group>
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Register" component={RegisterScreen} />
