@@ -93,7 +93,7 @@ export default function RegisterScreen({ navigation }: Props) {
             <Text style={styles.label}>Nama Lengkap (Max 12 Huruf)</Text>
             <TextInput
               style={styles.input}
-              placeholder="Contoh: Ivan"
+              placeholder="Masukkan nama Anda"
               placeholderTextColor="#aaa"
               value={name}
               onChangeText={setName}
